@@ -1,4 +1,4 @@
-"""Build hypergraph sidecars and Mt-KaHyPar .hgr file from graph + workload stats."""
+"""Generic hypergraph builder for any dataset following the unified format."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ def load_vertices(vertices_path: Path) -> Tuple[Dict[str, int], Dict[int, str]]:
 
 def load_edge_weights(path: Path) -> Dict[str, int]:
     weights: Dict[str, int] = {}
+    if not path.exists():
+        return weights
     with path.open("r", encoding="utf-8") as f:
         f.readline()
         for line in f:
@@ -34,6 +36,8 @@ def load_edge_weights(path: Path) -> Dict[str, int]:
 
 def load_vertex_weights(path: Path) -> Dict[str, int]:
     weights: Dict[str, int] = {}
+    if not path.exists():
+        return weights
     with path.open("r", encoding="utf-8") as f:
         f.readline()
         for line in f:
@@ -64,6 +68,7 @@ def build_hypergraph(
     weights_dir: Path,
     workload_dir: Path,
     hypergraph_dir: Path,
+    hgr_name: str = "graph.hgr",
 ) -> dict:
     original_to_vid, vid_to_original = load_vertices(graph_dir / "vertices.tsv")
     vertex_weights = load_vertex_weights(weights_dir / "vertex_weights.tsv")
@@ -94,7 +99,9 @@ def build_hypergraph(
         if len(pins) < 2:
             continue
         hyperedges.append((task_weight, pins))
-        hyperedge_rows.append(f"task\t{','.join(str(v) for v in pins)}\twitness\t{task_weight}")
+        hyperedge_rows.append(
+            f"task\t{','.join(str(v) for v in pins)}\twitness\t{task_weight}"
+        )
         task_count += 1
 
     hypergraph_dir.mkdir(parents=True, exist_ok=True)
@@ -105,9 +112,8 @@ def build_hypergraph(
 
     num_vertices = len(original_to_vid)
     num_hyperedges = len(hyperedges)
-    hgr_path = hypergraph_dir / "KQAPro.hgr"
+    hgr_path = hypergraph_dir / hgr_name
     with hgr_path.open("w", encoding="utf-8") as f:
-        # format=3 => vertex weights + hyperedge weights
         f.write(f"{num_vertices} {num_hyperedges} 3\n")
         for vid in range(1, num_vertices + 1):
             original_id = vid_to_original[vid]
