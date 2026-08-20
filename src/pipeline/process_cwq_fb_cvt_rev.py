@@ -9,37 +9,40 @@ from pathlib import Path
 
 from src.kg.build_fb_cvt_rev import build_fb_cvt_rev_graph, find_fb_cvt_rev_dir
 from src.kg.index_fb_sqlite import build_sqlite_index
-from src.workload.trace_cwq_fb import run_cwq_coverage
+from src.workload.trace_cwq_fb_fast import run_cwq_coverage_fast
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def extract_fb_cvt_rev(zip_path: Path, source_out: Path) -> Path:
+    """Extract only FB+CVT-REV via 7-Zip (Python zipfile fails on this ZIP64/Mac archive)."""
+    import shutil
+    import subprocess
+
     source_out.mkdir(parents=True, exist_ok=True)
-    print(f"Listing zip members matching FB+CVT-REV in {zip_path} ...", flush=True)
-    with zipfile.ZipFile(zip_path) as z:
-        matches = [n for n in z.namelist() if "fb+cvt-rev" in n.lower().replace(" ", "")]
-        if not matches:
-            # broader search
-            matches = [
-                n
-                for n in z.namelist()
-                if "cvt" in n.lower() and "rev" in n.lower() and "+cvt" in n.lower().replace(" ", "")
-            ]
-            # exclude +REV (with reverse) when possible: FB+CVT+REV vs FB+CVT-REV
-            matches = [n for n in matches if "fb+cvt-rev" in n.lower().replace(" ", "") or "/fb+cvt-rev" in n.lower()]
-        if not matches:
-            # print some CVT names for debugging
-            sample = [n for n in z.namelist() if "cvt" in n.lower()][:40]
+    seven = Path(r"C:\Program Files\7-Zip\7z.exe")
+    if not seven.exists():
+        seven_path = shutil.which("7z")
+        if not seven_path:
             raise FileNotFoundError(
-                "No FB+CVT-REV members found in zip. Sample CVT entries:\n" + "\n".join(sample)
+                "7-Zip required to extract idirlab-freebases.zip "
+                "(Python zipfile raises Truncated file header on this archive)."
             )
-        print(f"Extracting {len(matches)} files ...", flush=True)
-        for i, name in enumerate(matches):
-            z.extract(name, source_out)
-            if (i + 1) % 20 == 0:
-                print(f"  extracted {i+1}/{len(matches)}", flush=True)
+        seven = Path(seven_path)
+
+    # 7z uses backslash patterns for nested members on Windows
+    pattern = r"idirlab-freebases\FB+CVT-REV\*"
+    cmd = [
+        str(seven),
+        "x",
+        str(zip_path),
+        pattern,
+        f"-o{source_out}",
+        "-y",
+    ]
+    print("Running:", " ".join(cmd), flush=True)
+    subprocess.check_call(cmd)
     return find_fb_cvt_rev_dir(source_out)
 
 
@@ -106,6 +109,7 @@ def main() -> None:
         print(json.dumps(meta, indent=2), flush=True)
 
     if stages["index"]:
+        # Optional legacy full SQLite index (slow / large). Prefer compact CWQ index in coverage.
         edges = processed_dir / "edges.tsv"
         db = processed_dir / "fb_cvt_rev.sqlite"
         print(f"Building SQLite index -> {db} ...", flush=True)
@@ -118,14 +122,14 @@ def main() -> None:
             raise FileNotFoundError(cwq_train)
         if not ontology_rev.exists():
             raise FileNotFoundError(ontology_rev)
-        print("Running CWQ coverage / grounding ...", flush=True)
-        cov = run_cwq_coverage(
+        print("Running FAST CWQ coverage (compact relation index) ...", flush=True)
+        cov = run_cwq_coverage_fast(
             train_json=cwq_train,
             processed_graph_dir=processed_dir,
             reverse_properties_path=ontology_rev,
             out_dir=cwq_out,
             limit=args.limit,
-            db_path=processed_dir / "fb_cvt_rev.sqlite",
+            index_cache=processed_dir / "cwq_rel_index.pkl",
         )
         summary["coverage"] = cov
         print(json.dumps(cov, indent=2), flush=True)

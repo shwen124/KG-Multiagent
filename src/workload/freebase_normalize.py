@@ -7,11 +7,12 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union
 
 
-NS_TOKEN_RE = re.compile(r"\bns:([A-Za-z0-9_./\-]+)")
+NS_TOKEN_RE = re.compile(r"\b(?:ns:|:)([A-Za-z0-9_./\-]+)")
+# Freebase SPARQL uses ns: (CWQ/WebQSP) or bare : with PREFIX : <.../ns/> (GrailQA)
 TRIPLE_RE = re.compile(
-    r"(ns:[A-Za-z0-9_./\-]+|\?[A-Za-z0-9_]+)\s+"
-    r"(ns:[A-Za-z0-9_./\-]+)\s+"
-    r"(ns:[A-Za-z0-9_./\-]+|\?[A-Za-z0-9_]+)\s*\."
+    r"((?:ns:|:)[A-Za-z0-9_./\-]+|\?[A-Za-z0-9_]+)\s+"
+    r"((?:ns:|:)[A-Za-z0-9_./\-]+)\s+"
+    r"((?:ns:|:)[A-Za-z0-9_./\-]+|\?[A-Za-z0-9_]+)\s*\."
 )
 
 METADATA_PREFIXES = (
@@ -47,6 +48,9 @@ def normalize_ns_token(raw: str) -> str:
         return raw
     if raw.startswith("ns:"):
         return ns_token_to_mid_or_rel(raw)
+    if raw.startswith(":") and not raw.startswith("://"):
+        # GrailQA-style abbreviated IRI under PREFIX : <.../ns/>
+        return ns_token_to_mid_or_rel("ns:" + raw[1:])
     if raw.startswith("http://rdf.freebase.com/ns/"):
         rest = raw[len("http://rdf.freebase.com/ns/") :]
         return ns_token_to_mid_or_rel("ns:" + rest)
@@ -90,7 +94,7 @@ def load_reverse_properties(path: Path) -> Dict[str, str]:
 
 
 def extract_structural_triples(sparql: str) -> List[Tuple[str, str, str]]:
-    """Extract (s,p,o) after ns: normalization. Skips FILTER-only content."""
+    """Extract (s,p,o) after ns:/: normalization. Skips FILTER-only content."""
     triples = []
     for m in TRIPLE_RE.finditer(sparql):
         s, p, o = m.group(1), m.group(2), m.group(3)

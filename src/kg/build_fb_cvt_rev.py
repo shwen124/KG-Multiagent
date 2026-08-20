@@ -12,38 +12,17 @@ from typing import Dict, Iterable, Iterator, Tuple
 
 def find_fb_cvt_rev_dir(source_root: Path) -> Path:
     """Locate the extracted FB+CVT-REV directory under source/."""
-    candidates = []
     for p in source_root.rglob("entity2id.txt"):
         parent = p.parent
-        name = parent.name.lower().replace(" ", "")
-        if "fb+cvt-rev" in name or "fb_cvt_rev" in name or name == "fb+cvt-rev":
-            candidates.append(parent)
-        elif "cvt" in name and "rev" in name and "+" in parent.name:
-            # prefer +CVT-REV over -CVT
-            if "+cvt" in name and "-rev" in name.replace("+rev", ""):
-                candidates.append(parent)
-    if not candidates:
-        # fallback: any folder containing the five required files
-        for p in source_root.rglob("entity2id.txt"):
-            parent = p.parent
+        # Exact name match preferred
+        if parent.name == "FB+CVT-REV":
             needed = ["train.txt", "valid.txt", "test.txt", "relation2id.txt"]
             if all((parent / f).exists() for f in needed):
-                # exclude +REV (reverse included) if we can detect
-                n = parent.name.lower()
-                if "cvt" in n and "+rev" not in n.replace("cvt+rev", "cvt"):
-                    candidates.append(parent)
-                elif "fb+cvt-rev" in n.replace(" ", ""):
-                    candidates.append(parent)
-    if not candidates:
-        raise FileNotFoundError(
-            f"Cannot find FB+CVT-REV under {source_root}. "
-            "Extract only that variant from idirlab-freebases.zip."
-        )
-    # Prefer exact FB+CVT-REV naming
-    for c in candidates:
-        if "fb+cvt-rev" in c.name.lower().replace(" ", ""):
-            return c
-    return candidates[0]
+                return parent
+    raise FileNotFoundError(
+        f"Cannot find FB+CVT-REV under {source_root}. "
+        "Extract only that variant from idirlab-freebases.zip."
+    )
 
 
 def parse_entity2id(path: Path) -> Dict[str, int]:
