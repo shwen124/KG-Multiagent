@@ -26,6 +26,7 @@ def run_pipeline(
         weights_dir=output_dir / "weights",
         workload_dir=output_dir / "workload",
         hypergraph_dir=output_dir / "hypergraph",
+        hgr_name="KQAPro.hgr",
     )
     summary = {
         "dataset": "KQAPro",
